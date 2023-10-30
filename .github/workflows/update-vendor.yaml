@@ -6,12 +6,6 @@ on:
     # Run weekly at 05:00 on Sunday
     - cron: "0 5 * * 0"
 
-env:
-  FEDRAMP_PROFILE_NAME: "fedramp_rev5_high"
-  NIST_CATALOG_NAME: "nist_rev5_800_53"
-  NIST_CATALOG_URL: "https://raw.githubusercontent.com/usnistgov/oscal-content/master/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json"
-  FEDRAMP_PROFILE_URL: "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev5/baselines/json/FedRAMP_rev5_HIGH-baseline_profile.json"
-
 jobs:
   update-vendor:
     name: Update content
@@ -19,6 +13,17 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    strategy:
+      matrix:
+        variables:
+          - catalog-source: "https://raw.githubusercontent.com/usnistgov/oscal-content/master/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json"
+            profile-source: "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev5/baselines/json/FedRAMP_rev5_HIGH-baseline_profile.json"
+            profile-name: "fedramp_rev5_high"
+            catalog-name: "nist_rev5_800_53"
+          - catalog-source: "https://raw.githubusercontent.com/usnistgov/oscal-content/master/nist.gov/SP800-53/rev4/json/NIST_SP-800-53_rev4_catalog.json"
+            profile-source: "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev4/baselines/json/FedRAMP_rev4_HIGH-baseline_profile.json"
+            profile-name: "fedramp_rev4_high"
+            catalog-name: "nist_rev4_800_53"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,14 +35,14 @@ jobs:
         run: pip3 install compliance-trestle==2.3.1
       - name: Update catalogs
         run: |
-          rm -rf "catalogs/${NIST_CATALOG_NAME}"
-          trestle import -f "${NIST_CATALOG_URL}" -o "${NIST_CATALOG_NAME}"
+          rm -rf "catalogs/${{ matrix.variables.catalog-name }}"
+          trestle import -f "${{ matrix.variables.catalog-source }}" -o "${{ matrix.variables.catalog-name }}"
         working-directory: ./vendor
       - name: Update profiles
         run: |
-          rm -rf "profiles/${FEDRAMP_PROFILE_NAME}"
-          trestle import -f "${FEDRAMP_PROFILE_URL}" -o "${FEDRAMP_PROFILE_NAME}"
-          trestle href --name "${FEDRAMP_PROFILE_NAME}" -hr "trestle://catalogs/${NIST_CATALOG_NAME}/catalog.json"
+          rm -rf "profiles/${{ matrix.variables.profile-name }}"
+          trestle import -f "${{ matrix.variables.profile-source }}" -o "${{ matrix.variables.profile-name }}"
+          trestle href --name "${{ matrix.variables.profile-name }}" -hr "trestle://catalogs/${{ matrix.variables.catalog-name }}/catalog.json"
         working-directory: ./vendor
       - name: Update content
         uses: peter-evans/create-pull-request@v5.0.2
