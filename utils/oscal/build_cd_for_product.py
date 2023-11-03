@@ -29,9 +29,6 @@ import ssg.build_yaml
 from ssg.controls import ControlsManager
 
 
-# TODO(jpower432): Setup logging
-logging.basicConfig(level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +36,7 @@ SSG_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VENDOR_ROOT = os.path.join(SSG_ROOT, "vendor")
 RULES_JSON = os.path.join(SSG_ROOT, "build", "rule_dirs.json")
 BUILD_CONFIG = os.path.join(SSG_ROOT, "build", "build_config.yml")
+LOG_FILE = os.path.join(SSG_ROOT, "build", "build_cd_for_product.log")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -98,6 +96,28 @@ def _parse_args() -> argparse.Namespace:
         help="Type of component definition to create",
     )
     return parser.parse_args()
+
+
+def configure_logger(log_file=None, log_level=logging.INFO):
+    """Configure the logger."""
+    logger.setLevel(log_level)
+
+    log_format_file = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    formatter_file = logging.Formatter(log_format_file)
+
+    log_format_console = "%(levelname)s - %(message)s"
+    formatter_console = logging.Formatter(log_format_console)
+
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(formatter_file)
+        logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter_console)
+    logger.addHandler(console_handler)
 
 
 class ComponentDefinitionGenerator:
@@ -301,6 +321,7 @@ class ComponentDefinitionGenerator:
 def main():
     """Main function."""
     args = _parse_args()
+    configure_logger(LOG_FILE, log_level=logging.INFO)
     cd_generator = ComponentDefinitionGenerator(
         args.product,
         args.root,
@@ -310,13 +331,17 @@ def main():
         args.profile,
         args.control,
     )
+
     try:
         cd_generator.create_cd(args.output, args.component_definition_type)
     except ValueError as e:
-        logger.error("Error creating component definition" + f": {e}", exc_info=True)
+        logger.error(f"Invalid value: {e}", exc_info=True)
         sys.exit(2)
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}", exc_info=True)
+        sys.exit(3)
     except Exception as e:
-        logger.error("Error creating component definition" + f": {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         sys.exit(1)
 
 
