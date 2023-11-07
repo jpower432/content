@@ -1,3 +1,0 @@
--r requirements.txt
-# used in utils/oscal
-compliance-trestle
