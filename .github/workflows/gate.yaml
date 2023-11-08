@@ -64,10 +64,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build
-        run: ./build_product alinux2 alinux3 chromium fedora firefox rhcos4 rhel7 rhel8 rhel9 sle12 sle15 ubuntu2004 ubuntu2204 uos20
-        env:
-          PYENV_VERSION: 3.8.14
-          ADDITIONAL_CMAKE_OPTIONS: "-DPYTHON_EXECUTABLE=/root/.pyenv/versions/3.8.14/bin/python3.8"
+        run: |-
+          source ~/.bashrc
+          pyenv shell 3.8.14
+          echo "Python Interpreter Path: $(which python3)"
+          echo "Python Version: $(python3 --version)"
+          export PYTHONPATH="$PYENV_ROOT/versions/3.8.14/lib/python3.8/site-packages"
+          echo "PYTHONPATH: $PYTHONPATH"
+          pyenv exec pip list
+          export ADDITIONAL_CMAKE_OPTIONS="-DPYTHON_EXECUTABLE=$PYENV_ROOT/versions/3.8.14/bin/python3.8"
+          ./build_product alinux2 alinux3 chromium fedora firefox rhcos4 rhel7 rhel8 rhel9 sle12 sle15 ubuntu2004 ubuntu2204 uos20
       - name: Test
         run: ctest -j2 --output-on-failure -E unique-stigids
         working-directory: ./build
@@ -101,10 +107,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Build
         run: |-
+          source ~/.bashrc
+          pyenv shell 3.8.14
+          echo "Python Interpreter Path: $(which python3)"
+          echo "Python Version: $(python3 --version)"
+          export PYTHONPATH="$PYENV_ROOT/versions/3.8.14/lib/python3.8/site-packages"
+          echo "PYTHONPATH: $PYTHONPATH"
+          pyenv exec pip list
+          export ADDITIONAL_CMAKE_OPTIONS="-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF -DPYTHON_EXECUTABLE=$PYENV_ROOT/versions/3.8.14/bin/python3.8"
           ./build_product sle12 sle15
-        env:
-          PYENV_VERSION: 3.8.14
-          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF -DPYTHON_EXECUTABLE=/root/.pyenv/versions/3.8.14/bin/python3.8"
       - name: Test
         run: ctest -j2 --output-on-failure -E unique-stigids
         working-directory: ./build
