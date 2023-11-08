@@ -96,6 +96,7 @@ endmacro()
 
 mypy_test("utils/import_srg_spreadsheet.py")
 mypy_test("utils/check_eof.py")
+mypy_test("utils/oscal/")
 
 if(PYTHON_VERSION_MAJOR GREATER 2 AND PY_OPENPYXL AND PY_PANDAS AND SSG_PRODUCT_RHEL9)
     add_test(
