@@ -2,12 +2,11 @@
 
 """Build a component definition for a product from pre-existing profiles"""
 
-import json
 import logging
 import os
 import pathlib
 import re
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from trestle.common.common_types import TypeWithProps, TypeWithParts
 from trestle.common.const import TRESTLE_HREF_HEADING, IMPLEMENTATION_STATUS
@@ -26,16 +25,17 @@ from trestle.oscal.component import (
     Statement,
 )
 
-import ssg.components
 import ssg.environment
-import ssg.rules
-import ssg.build_yaml
 from ssg.controls import ControlsManager, Status, Control
+import ssg.products
+
+from utils.oscal.params_extractor import ParameterExtractor
+from utils.oscal.rules_transformer import RulesTransformer, RuleInfo
 
 
 logger = logging.getLogger(__name__)
 
-SECTION_PATTERN = r'Section ([a-z]):'
+SECTION_PATTERN = r"Section ([a-z]):"
 
 
 # TODO: Verify that this is the correct way to handle the status
@@ -79,7 +79,7 @@ class OSCALProfileHelper:
             self._root,
             profile_path,
             block_params=False,
-            params_format='[.]',
+            params_format="[.]",
             show_value_warnings=True,
         )
 
@@ -156,14 +156,13 @@ class ComponentDefinitionGenerator:
         self.policy_id = control
         self.controls_mgr = self.get_controls_mgr(control)
 
-        with open(json_path, 'r') as f:
-            rule_dir_json = json.load(f)
-        self.rule_json = rule_dir_json
+        self.rules_transformer = RulesTransformer(
+            root, self.env_yaml, json_path, ParameterExtractor(root, self.env_yaml)
+        )
 
     def get_env_yaml(self, build_config_yaml: str) -> Dict[str, Any]:
         """Get the environment yaml."""
-        product_dir = os.path.join(self.ssg_root, "products", self.product)
-        product_yaml_path = os.path.join(product_dir, "product.yml")
+        product_yaml_path = ssg.products.product_yaml_path(self.ssg_root, self.product)
         env_yaml = ssg.environment.open_environment(
             build_config_yaml,
             product_yaml_path,
@@ -173,10 +172,10 @@ class ComponentDefinitionGenerator:
 
     def get_source(self, profile_name_or_href: str) -> Tuple[str, str]:
         """Get the source of the profile."""
-        profile_in_trestle_dir = '://' not in profile_name_or_href
+        profile_in_trestle_dir = "://" not in profile_name_or_href
         profile_href = profile_name_or_href
         if profile_in_trestle_dir:
-            local_path = f'profiles/{profile_name_or_href}/profile.json'
+            local_path = f"profiles/{profile_name_or_href}/profile.json"
             profile_href = TRESTLE_HREF_HEADING + local_path
             profile_path = str(self.trestle_root / local_path)
         else:
@@ -206,7 +205,7 @@ class ComponentDefinitionGenerator:
             implemented_req = generate_sample_model(ImplementedRequirement)
             implemented_req.control_id = control_id
             self.handle_response(implemented_req, control)
-            # TODO(jpower432): Setup rules in the properties file
+            self.add_rules(implemented_req, control.rules)
             return implemented_req
         return None
 
@@ -220,7 +219,7 @@ class ComponentDefinitionGenerator:
         """
         control_response = control.notes
         pattern = re.compile(SECTION_PATTERN, re.IGNORECASE)
-        lines = control_response.split('\n')
+        lines = control_response.split("\n")
 
         sections_dict = dict()
         current_section_label = None
@@ -250,13 +249,20 @@ class ComponentDefinitionGenerator:
                 if statement_id is None:
                     continue
 
-                section_content_str = '\n'.join(section_content)
-                section_content_str = pattern.sub('', section_content_str)
+                section_content_str = "\n".join(section_content)
+                section_content_str = pattern.sub("", section_content_str)
                 statement = self.create_statement(statement_id)
                 self._add_response_by_status(
                     statement, oscal_status, section_content_str.strip()
                 )
                 implemented_req.statements.append(statement)
+
+    def add_rules(self, type_with_props: TypeWithProps, rule_ids: List[str]) -> None:
+        """Add rules to a type with props."""
+        type_with_props.props = as_list(type_with_props.props)
+        rules_objs: List[RuleInfo] = self.rules_transformer.load(rule_ids)
+        rule_properties: List[Property] = self.rules_transformer.transform(rules_objs)
+        type_with_props.props.extend(rule_properties)
 
     @staticmethod
     def _add_response_by_status(
