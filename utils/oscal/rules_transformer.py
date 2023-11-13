@@ -6,8 +6,6 @@ import json
 import logging
 from typing import Any, List, Dict, Tuple, Optional
 
-from trestle.common.const import TRESTLE_GENERIC_NS
-from trestle.core.generators import generate_sample_model
 from trestle.oscal.common import Property
 from trestle.tasks.csv_to_oscal_cd import (
     PARAMETER_DESCRIPTION,
@@ -25,12 +23,12 @@ import ssg.build_yaml
 import ssg.products
 import ssg.rules
 
-from utils.oscal import get_benchmark_root
+from utils.oscal import get_benchmark_root, add_prop
 from utils.oscal.params_extractor import ParameterExtractor, ParamInfo
 
 logger = logging.getLogger(__name__)
 
-TRESTLE_CD_NS = f"{TRESTLE_GENERIC_NS}/cd"
+
 XCCDF_VARIABLE = "xccdf_variable"
 
 
@@ -230,9 +228,9 @@ class RulesTransformer:
     def _get_rule_properties(self, ruleset: str, rule_obj: RuleInfo) -> List[Property]:
         """Get a set of rule properties for a rule object."""
         rule_properties: List[Property] = list()
-        rule_properties.append(self.add_prop(RULE_ID, rule_obj.id, ruleset))
+        rule_properties.append(add_prop(RULE_ID, rule_obj.id, ruleset))
         rule_properties.append(
-            self.add_prop(RULE_DESCRIPTION, rule_obj.description, ruleset)
+            add_prop(RULE_DESCRIPTION, rule_obj.description, ruleset)
         )
 
         for param in rule_obj.parameters:
@@ -247,17 +245,17 @@ class RulesTransformer:
     ) -> List[Property]:
         """Get a set of parameter properties for a rule object."""
         try:
-            id_prop = self.add_prop(PARAMETER_ID, param_info.id, ruleset)
+            id_prop = add_prop(PARAMETER_ID, param_info.id, ruleset)
 
-            description_prop = self.add_prop(
+            description_prop = add_prop(
                 PARAMETER_DESCRIPTION, param_info.description, ruleset
             )
-            default_prop = self.add_prop(
+            default_prop = add_prop(
                 PARAMETER_VALUE_DEFAULT,
                 param_info.default_value,
                 ruleset,
             )
-            alternative_prop = self.add_prop(
+            alternative_prop = add_prop(
                 PARAMETER_VALUE_ALTERNATIVES,
                 str(param_info.options),
                 ruleset,
@@ -265,16 +263,6 @@ class RulesTransformer:
             return [id_prop, description_prop, default_prop, alternative_prop]
         except KeyError as e:
             raise ValueError(f"Could not find parameter for rule {rule_id}: {e}")
-
-    @staticmethod
-    def add_prop(name: str, value: str, remarks: str) -> Property:
-        """Add a property to a set of rule properties."""
-        prop = generate_sample_model(Property)
-        prop.name = name
-        prop.value = value
-        prop.remarks = remarks
-        prop.ns = TRESTLE_CD_NS  # type: ignore
-        return prop
 
     def transform(self, rule_objs: List[RuleInfo]) -> List[Property]:
         """Get the rules properties for a set of rule ids."""

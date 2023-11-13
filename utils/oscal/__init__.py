@@ -4,10 +4,15 @@ import os
 
 import ssg.products
 
+from trestle.common.const import TRESTLE_GENERIC_NS
+from trestle.core.generators import generate_sample_model
+from trestle.oscal.common import Property
+
 SSG_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VENDOR_ROOT = os.path.join(SSG_ROOT, "vendor")
 RULES_JSON = os.path.join(SSG_ROOT, "build", "rule_dirs.json")
 BUILD_CONFIG = os.path.join(SSG_ROOT, "build", "build_config.yml")
+TRESTLE_CD_NS = f"{TRESTLE_GENERIC_NS}/cd"
 
 
 def get_benchmark_root(root: str, product: str) -> str:
@@ -17,3 +22,14 @@ def get_benchmark_root(root: str, product: str) -> str:
     product_dir = product_yaml.get("product_dir")
     benchmark_root = os.path.join(product_dir, product_yaml.get("benchmark_root"))
     return benchmark_root
+
+
+def add_prop(name: str, value: str, remarks: str) -> Property:
+    """Add a property to a set of rule properties."""
+    prop = generate_sample_model(Property)
+    prop.name = name
+    prop.value = value
+    if remarks:
+        prop.remarks = remarks
+    prop.ns = TRESTLE_CD_NS  # type: ignore
+    return prop

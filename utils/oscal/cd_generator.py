@@ -29,6 +29,7 @@ import ssg.environment
 from ssg.controls import ControlsManager, Status, Control
 import ssg.products
 
+from utils.oscal import add_prop
 from utils.oscal.params_extractor import ParameterExtractor
 from utils.oscal.rules_transformer import RulesTransformer, RuleInfo
 
@@ -277,9 +278,8 @@ class ComponentDefinitionGenerator:
         remarks with justification for the status.
         """
 
-        status_prop = Property(
-            name=IMPLEMENTATION_STATUS, value=implementation_status
-        )  # type: ignore
+        status_prop = add_prop(IMPLEMENTATION_STATUS, implementation_status, "")
+
         if (
             implementation_status == OscalStatus.IMPLEMENTED
             or implementation_status == OscalStatus.PARTIAL
