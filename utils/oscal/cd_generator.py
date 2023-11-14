@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/env python3
 
 """Build a component definition for a product from pre-existing profiles"""
 
