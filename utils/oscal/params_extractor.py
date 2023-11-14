@@ -3,6 +3,8 @@ import os
 from typing import Any, Dict, Generator
 
 import ssg.build_yaml
+from ssg.utils import required_key
+
 from utils.oscal import get_benchmark_root
 
 logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ class ParameterExtractor:
         """Initialize."""
         self.root = root
         self.env_yaml = env_yaml
-        self.product = env_yaml["product"]
+        self.product = required_key(env_yaml, "product")
         self._params_by_id: Dict[str, ParamInfo] = dict()
 
         benchmark_root = get_benchmark_root(root, self.product)
@@ -72,7 +74,7 @@ class ParameterExtractor:
             try:
                 value_yaml = ssg.build_yaml.Value.from_yaml(file, env_yaml)
                 parameter_id = os.path.basename(file).replace(VAR_FILE_EXTENSION, "")
-                default = value_yaml.options["default"]
+                default = required_key(value_yaml.options, "default")
                 param_obj = ParamInfo(
                     parameter_id,
                     value_yaml.description.replace("\n", " ").strip(),
@@ -81,8 +83,8 @@ class ParameterExtractor:
                 param_obj.set_options(value_yaml.options)
                 logger.debug(f"Adding parameter {parameter_id}")
                 self._params_by_id[parameter_id] = param_obj
-            except Exception as e:
-                logger.warning(f"Error processing file {file}: {e}")
+            except ValueError as e:
+                logger.warning(f"Invalid var file {file}: {e}")
 
     def get_params_for_id(self, param_id: str) -> ParamInfo:
         """Get the parameter information for a parameter id."""

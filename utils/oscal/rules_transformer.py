@@ -22,6 +22,7 @@ from trestle.tasks.csv_to_oscal_cd import (
 import ssg.build_yaml
 import ssg.products
 import ssg.rules
+from ssg.utils import required_key
 
 from utils.oscal import get_benchmark_root, add_prop
 from utils.oscal.params_extractor import ParameterExtractor, ParamInfo
@@ -87,7 +88,7 @@ class RulesTransformer:
         self.rule_json = rule_dir_json
         self.root = root
         self.env_yaml = env_yaml
-        self.product = env_yaml["product"]
+        self.product = required_key(env_yaml, "product")
         self.param_extractor = param_extractor
 
         benchmark_root = get_benchmark_root(root, self.product)
@@ -244,25 +245,22 @@ class RulesTransformer:
         self, ruleset: str, rule_id: str, param_info: ParamInfo
     ) -> List[Property]:
         """Get a set of parameter properties for a rule object."""
-        try:
-            id_prop = add_prop(PARAMETER_ID, param_info.id, ruleset)
+        id_prop = add_prop(PARAMETER_ID, param_info.id, ruleset)
 
-            description_prop = add_prop(
-                PARAMETER_DESCRIPTION, param_info.description, ruleset
-            )
-            default_prop = add_prop(
-                PARAMETER_VALUE_DEFAULT,
-                param_info.default_value,
-                ruleset,
-            )
-            alternative_prop = add_prop(
-                PARAMETER_VALUE_ALTERNATIVES,
-                str(param_info.options),
-                ruleset,
-            )
-            return [id_prop, description_prop, default_prop, alternative_prop]
-        except KeyError as e:
-            raise ValueError(f"Could not find parameter for rule {rule_id}: {e}")
+        description_prop = add_prop(
+            PARAMETER_DESCRIPTION, param_info.description, ruleset
+        )
+        default_prop = add_prop(
+            PARAMETER_VALUE_DEFAULT,
+            param_info.default_value,
+            ruleset,
+        )
+        alternative_prop = add_prop(
+            PARAMETER_VALUE_ALTERNATIVES,
+            str(param_info.options),
+            ruleset,
+        )
+        return [id_prop, description_prop, default_prop, alternative_prop]
 
     def transform(self, rule_objs: List[RuleInfo]) -> List[Property]:
         """Get the rules properties for a set of rule ids."""
