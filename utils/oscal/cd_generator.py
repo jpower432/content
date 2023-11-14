@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 SECTION_PATTERN = r'Section ([a-z]):'
 
 
-# TODO: Verify that this is the correct way to handle the status
 class OscalStatus:
     PLANNED = "planned"
     NOT_APPLICABLE = "not-applicable"
@@ -49,12 +48,13 @@ class OscalStatus:
         data = {
             Status.INHERENTLY_MET: OscalStatus.IMPLEMENTED,
             Status.DOES_NOT_MEET: OscalStatus.ALTERNATIVE,
-            Status.NOT_APPLICABLE: OscalStatus.NOT_APPLICABLE,
-            Status.AUTOMATED: OscalStatus.ALTERNATIVE,
+            Status.DOCUMENTATION: OscalStatus.IMPLEMENTED,
+            Status.AUTOMATED: OscalStatus.IMPLEMENTED,
             Status.MANUAL: OscalStatus.ALTERNATIVE,
             Status.PLANNED: OscalStatus.PLANNED,
             Status.PARTIAL: OscalStatus.PARTIAL,
-            Status.SUPPORTED: OscalStatus.ALTERNATIVE,
+            Status.SUPPORTED: OscalStatus.IMPLEMENTED,
+            Status.PENDING: OscalStatus.ALTERNATIVE,
         }
         return data.get(source, source)
 

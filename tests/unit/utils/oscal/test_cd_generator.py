@@ -101,7 +101,7 @@ A single response with no sections
     [
         (
             single_response,
-            Status.AUTOMATED,
+            Status.MANUAL,
             REPLACE_ME,
             OscalStatus.ALTERNATIVE,
             'A single response with no sections',
