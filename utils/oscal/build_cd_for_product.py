@@ -48,7 +48,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-c",
         "--control",
-        help="Control to use as the source for control responses amd implementation status",
+        help="Control to use as the source for control responses. \
+        To optionally filter by level, use the format <control_id>:<level>.",
         required=True,
     )
     parser.add_argument(
@@ -69,7 +70,6 @@ def _parse_args() -> argparse.Namespace:
         "--component-definition-type",
         choices=["service", "validation"],
         default="service",
-        required=False,
         help="Type of component definition to create",
     )
     return parser.parse_args()
@@ -101,6 +101,11 @@ def main():
     """Main function."""
     args = _parse_args()
     configure_logger(LOG_FILE, log_level=logging.INFO)
+
+    filter_by_level = None
+    if ":" in args.control:
+        args.control, filter_by_level = args.control.split(":")
+
     cd_generator = ComponentDefinitionGenerator(
         args.product,
         args.root,
@@ -109,6 +114,7 @@ def main():
         args.vendor_dir,
         args.profile,
         args.control,
+        filter_by_level,
     )
 
     try:

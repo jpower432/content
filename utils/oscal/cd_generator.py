@@ -131,6 +131,7 @@ class ComponentDefinitionGenerator:
         vendor_dir: str,
         profile_name_or_href,
         control: str,
+        filter_by_level: str = "",
     ) -> None:
         """
         Initialize the component definition generator and load the necessary files.
@@ -142,6 +143,7 @@ class ComponentDefinitionGenerator:
             build_config_yaml: Path to the build_config.yml file
             vendor_dir: Path to the vendor directory
             profile_name_or_href: Name or href of the profile to use
+            filter_by_level: Filter control responses by level
         """
         self.ssg_root = root
         self.trestle_root = pathlib.Path(vendor_dir)
@@ -154,6 +156,8 @@ class ComponentDefinitionGenerator:
         self.profile.load(profile_path)
 
         self.env_yaml = self.get_env_yaml(build_config_yaml)
+
+        self.filter_by_level = filter_by_level
         self.policy_id = control
         self.controls_mgr = self.get_controls_mgr(control)
 
@@ -193,6 +197,12 @@ class ComponentDefinitionGenerator:
         controls_manager.load()
         if control not in controls_manager.policies:
             raise ValueError(f"Policy {control} not found in controls")
+        if self.filter_by_level:
+            policy = controls_manager.policies[control]
+            if self.filter_by_level not in policy.levels_by_id.keys():
+                raise ValueError(
+                    f"Level {self.filter_by_level} not found in policy {control}"
+                )
         return controls_manager
 
     def create_implemented_requirement(
@@ -304,7 +314,16 @@ class ComponentDefinitionGenerator:
         ci = generate_sample_model(ControlImplementation)
         ci.source = self.profile_href
         all_implement_reqs = list()
-        for control in self.controls_mgr.get_all_controls(self.policy_id):
+
+        controls: List[Control] = list()
+        if self.filter_by_level:
+            controls = self.controls_mgr.get_all_controls_of_level(
+                self.policy_id, self.filter_by_level
+            )
+        else:
+            controls = self.controls_mgr.get_all_controls(self.policy_id)
+
+        for control in controls:
             implemented_req = self.create_implemented_requirement(control)
             if implemented_req:
                 all_implement_reqs.append(implemented_req)
