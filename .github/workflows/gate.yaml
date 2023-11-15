@@ -43,15 +43,33 @@ jobs:
       - name: Zypper refresh
         run: zypper refresh    
       - name: Install Deps           
-        run: zypper install -y git cmake make bats openscap-utils python3 python3-rpm python3-pip python3-devel python3-PyYAML python3-Jinja2 python3-setuptools libxslt-tools libxml2-tools ShellCheck
+        run: |-
+          zypper install -y git cmake make bats openscap-utils python3 python3-rpm python3-pip python3-devel libxslt-tools libxml2-tools ShellCheck \
+          pyenv gcc bzip2 libbz2-devel xz xz-devel openssl-devel ncurses-devel readline-devel zlib-devel libffi-devel sqlite3-devel awk
+      - name: Install newer python version with pyenv
+        run: pyenv install 3.8.14
+      - name: Set up shell to use pyenv
+        run: |-
+          echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+          echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+          echo 'eval "$(pyenv init -)"' >> ~/.bashrc
       - name: Upgrade pip python
-        run: pip install pip --upgrade
+        run: pyenv exec pip install pip --upgrade
+        env:
+          PYENV_VERSION: 3.8.14
       - name: Install deps python
-        run: pip install pytest pytest-cov
+        run: pyenv exec pip install compliance-trestle==2.4.0 PyYAML pytest pytest-cov Jinja2 setuptools
+        env:
+          PYENV_VERSION: 3.8.14
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build
-        run: ./build_product alinux2 alinux3 chromium fedora firefox rhcos4 rhel7 rhel8 rhel9 sle12 sle15 ubuntu2004 ubuntu2204 uos20
+        run: |-
+          source ~/.bashrc
+          pyenv shell 3.8.14
+          export PYTHONPATH="$PYENV_ROOT/versions/3.8.14/lib/python3.8/site-packages"
+          export ADDITIONAL_CMAKE_OPTIONS="-DPYTHON_EXECUTABLE=$PYENV_ROOT/versions/3.8.14/bin/python3.8"
+          ./build_product alinux2 alinux3 chromium fedora firefox rhcos4 rhel7 rhel8 rhel9 sle12 sle15 ubuntu2004 ubuntu2204 uos20
       - name: Test
         run: ctest -j2 --output-on-failure -E unique-stigids
         working-directory: ./build
@@ -63,13 +81,33 @@ jobs:
       image: opensuse/leap:15
     steps:
       - name: Install Deps
-        run: zypper install -y git cmake make openscap-utils python3-PyYAML bats python3-pytest python3-pytest-cov python3-Jinja2 python3-setuptools libxslt-tools libxml2-tools ShellCheck
+        run: |-
+          zypper install -y git cmake make openscap-utils bats python3-pip libxslt-tools libxml2-tools ShellCheck \
+          pyenv tar gcc bzip2 libbz2-devel xz xz-devel openssl-devel ncurses-devel readline-devel zlib-devel tk-devel libffi-devel sqlite3-devel findutils
+      - name: Install newer python version with pyenv
+        run: pyenv install 3.8.14
+      - name: Set up shell to use pyenv
+        run: |-
+          echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+          echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+          echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+      - name: Upgrade pip python
+        run: pyenv exec pip install pip --upgrade
+        env:
+          PYENV_VERSION: 3.8.14
+      - name: Install deps python
+        run: pyenv exec pip install compliance-trestle==2.4.0 PyYAML pytest pytest-cov Jinja2 setuptools
+        env:
+          PYENV_VERSION: 3.8.14
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build
-        run: ./build_product sle12 sle15
-        env:
-          ADDITIONAL_CMAKE_OPTIONS: "-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
+        run: |-
+          source ~/.bashrc
+          pyenv shell 3.8.14
+          export PYTHONPATH="$PYENV_ROOT/versions/3.8.14/lib/python3.8/site-packages"
+          export ADDITIONAL_CMAKE_OPTIONS="-DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF -DPYTHON_EXECUTABLE=$PYENV_ROOT/versions/3.8.14/bin/python3.8"
+          ./build_product sle12 sle15
       - name: Test
         run: ctest -j2 --output-on-failure -E unique-stigids
         working-directory: ./build
@@ -86,8 +124,10 @@ jobs:
         run: apt-get install -y ansible-lint bats check cmake libopenscap8 libxml2-utils ninja-build python3-github python3-pip xsltproc
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Upgrade pip python
+        run: pip3 install --upgrade pip 
       - name: Install deps python
-        run: pip3 install -r requirements.txt -r test-requirements.txt
+        run: pip3 install -r requirements.txt -r test-requirements.txt --ignore-installed PyYAML
       - name: Build
         env:
           ADDITIONAL_CMAKE_OPTIONS: "-DSSG_ANSIBLE_PLAYBOOKS_PER_RULE_ENABLED=ON -DSSG_OVAL_SCHEMATRON_VALIDATION_ENABLED=OFF"
@@ -142,7 +182,7 @@ jobs:
       image: fedora:latest
     steps:
       - name: Install Deps
-        run: dnf install -y cmake make openscap-utils python3-pyyaml bats ansible python3-pip ShellCheck git
+        run: dnf install -y cmake make openscap-utils python3-pyyaml bats ansible python3-pip ShellCheck git python3-devel gcc-c++
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install deps python
@@ -190,7 +230,7 @@ jobs:
       -   name: Run Updates
           run: dnf update -y
       -   name: Install Deps
-          run: dnf install -y cmake make openscap-utils bats ansible python3-pip ShellCheck git
+          run: dnf install -y cmake make openscap-utils bats ansible python3-pip ShellCheck git python3-devel gcc-c++
       -   name: Checkout
           uses: actions/checkout@v4
       -   name: Install deps python
