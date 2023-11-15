@@ -7,14 +7,16 @@ import logging
 import os
 import pathlib
 import re
-import uuid
+from typing import Any, Dict, Optional, Set, Tuple
 
+from trestle.common.common_types import TypeWithProps, TypeWithParts
 from trestle.common.const import TRESTLE_HREF_HEADING, IMPLEMENTATION_STATUS
 from trestle.common.list_utils import as_list
 from trestle.core.generators import generate_sample_model
 from trestle.core.catalog.catalog_interface import CatalogInterface
 from trestle.core.control_interface import ControlInterface
 from trestle.core.profile_resolver import ProfileResolver
+from trestle.oscal import catalog as cat
 from trestle.oscal.common import Property
 from trestle.oscal.component import (
     ComponentDefinition,
@@ -28,7 +30,7 @@ import ssg.components
 import ssg.environment
 import ssg.rules
 import ssg.build_yaml
-from ssg.controls import ControlsManager, Status
+from ssg.controls import ControlsManager, Status, Control
 
 
 logger = logging.getLogger(__name__)
@@ -61,19 +63,74 @@ class OscalStatus:
     STATUSES = {PLANNED, NOT_APPLICABLE, ALTERNATIVE, IMPLEMENTED, PARTIAL}
 
 
+class OSCALProfileHelper:
+    """Helper class to handle OSCAL profile."""
+
+    def __init__(self, trestle_root: pathlib.Path) -> None:
+        """Initialize."""
+        self._root = trestle_root
+        self.profile_controls: Set[str] = set()
+        self.controls_by_label: Dict[str, str] = dict()
+
+    def load(self, profile_path: str) -> None:
+        """Load the profile catalog."""
+        profile_resolver = ProfileResolver()
+        resolved_catalog: cat.Catalog = profile_resolver.get_resolved_profile_catalog(
+            self._root,
+            profile_path,
+            block_params=False,
+            params_format='[.]',
+            show_value_warnings=True,
+        )
+
+        for control in CatalogInterface(resolved_catalog).get_all_controls_from_dict():
+            self.profile_controls.add(control.id)
+            label = ControlInterface.get_label(control)
+            if label:
+                self.controls_by_label[label] = control.id
+                self._handle_parts(control)
+
+    def _handle_parts(
+        self,
+        control: TypeWithParts,
+    ) -> None:
+        """Handle parts of a control."""
+        if control.parts:
+            for part in control.parts:
+                if not part.id:
+                    continue
+                self.profile_controls.add(part.id)
+                label = ControlInterface.get_label(part)
+                if label:
+                    self.controls_by_label[label] = part.id
+                self._handle_parts(part)
+
+    def validate(self, control_id: str) -> Optional[str]:
+        """Validate that the control id exists in the catalog and return the id"""
+        if control_id in self.controls_by_label.keys():
+            logging.debug(f"Found control {control_id} in control labels")
+            return self.controls_by_label.get(control_id)
+        elif control_id in self.profile_controls:
+            logging.debug(f"Found control {control_id} in profile control ids")
+            return control_id
+
+        logger.debug(f"Control {control_id} does not exist in the profile")
+        return None
+
+
 class ComponentDefinitionGenerator:
     """Generate a component definition from a product"""
 
     def __init__(
         self,
-        product,
-        root,
-        json_path,
-        build_config_yaml,
-        vendor_dir,
+        product: str,
+        root: str,
+        json_path: str,
+        build_config_yaml: str,
+        vendor_dir: str,
         profile_name_or_href,
-        control,
-    ):
+        control: str,
+    ) -> None:
         """
         Initialize the component definition generator and load the necessary files.
 
@@ -90,14 +147,10 @@ class ComponentDefinitionGenerator:
         self.product = product
 
         profile_path, profile_href = self.get_source(profile_name_or_href)
-        self.profile_path = profile_path
         self.profile_href = profile_href
 
-        # Used to match by profile control id and then by label property
-        (
-            self.profile_controls,
-            self.controls_by_label,
-        ) = self.resolve_profile_to_controls()
+        self.profile = OSCALProfileHelper(self.trestle_root)
+        self.profile.load(profile_path)
 
         self.env_yaml = self.get_env_yaml(build_config_yaml)
         self.policy_id = control
@@ -107,7 +160,7 @@ class ComponentDefinitionGenerator:
             rule_dir_json = json.load(f)
         self.rule_json = rule_dir_json
 
-    def get_env_yaml(self, build_config_yaml):
+    def get_env_yaml(self, build_config_yaml: str) -> Dict[str, Any]:
         """Get the environment yaml."""
         product_dir = os.path.join(self.ssg_root, "products", self.product)
         product_yaml_path = os.path.join(product_dir, "product.yml")
@@ -118,14 +171,14 @@ class ComponentDefinitionGenerator:
         )
         return env_yaml
 
-    def get_source(self, profile_name_or_href):
+    def get_source(self, profile_name_or_href: str) -> Tuple[str, str]:
         """Get the source of the profile."""
         profile_in_trestle_dir = '://' not in profile_name_or_href
         profile_href = profile_name_or_href
         if profile_in_trestle_dir:
             local_path = f'profiles/{profile_name_or_href}/profile.json'
             profile_href = TRESTLE_HREF_HEADING + local_path
-            profile_path = self.trestle_root / local_path
+            profile_path = str(self.trestle_root / local_path)
         else:
             profile_path = profile_href
 
@@ -142,79 +195,13 @@ class ComponentDefinitionGenerator:
             raise ValueError(f"Policy {control} not found in controls")
         return controls_manager
 
-    def resolve_profile_to_controls(self):
-        """
-        Resolve the profile to a list of control ids.
-
-        Returns:
-            profile_controls: List of control ids in the profile
-            controls_by_label: Dictionary of controls by label
-        """
-        profile_resolver = ProfileResolver()
-        resolved_catalog = profile_resolver.get_resolved_profile_catalog(
-            self.trestle_root,
-            self.profile_path,
-            block_params=False,
-            params_format='[.]',
-            show_value_warnings=True,
-        )
-        profile_controls = set()
-        controls_by_label = dict()
-
-        for control in CatalogInterface(resolved_catalog).get_all_controls_from_dict():
-            profile_controls.add(control.id)
-            label = ControlInterface.get_label(control)
-            if label:
-                controls_by_label[label] = control.id
-                self.handle_parts(control, profile_controls, controls_by_label)
-        return profile_controls, controls_by_label
-
-    def handle_parts(self, control, profile_controls, controls_by_label):
-        """Handle parts of a control."""
-        if control.parts:
-            for part in control.parts:
-                profile_controls.add(part.id)
-                label = ControlInterface.get_label(part)
-                if label:
-                    controls_by_label[label] = part.id
-                self.handle_parts(part, profile_controls, controls_by_label)
-
-    def handle_rule_yaml(self, rule_id: str):
-        """Create rule object from rule yaml."""
-        rule_dir = self.rule_json[rule_id]['dir']
-        guide_dir = self.rule_json[rule_id]['guide']
-        product = self.env_yaml['product']
-        rule_obj = {'id': rule_id, 'dir': rule_dir, 'guide': guide_dir}
-        rule_file = ssg.rules.get_rule_dir_yaml(rule_dir)
-
-        rule_yaml = ssg.build_yaml.Rule.from_yaml(rule_file, env_yaml=self.env_yaml)
-        rule_yaml.normalize(product)
-        rule_obj['description'] = rule_yaml.description
-        rule_obj['fixtext'] = rule_yaml.fixtext
-        return rule_obj
-
-    def get_profile_control_id(self, control_name):
-        """
-        Get control info if it is in the parent profile.
-
-        Returns:
-            control_id: The control id if it is in the profile
-        """
-        if control_name in self.controls_by_label.keys():
-            logging.debug(f"Found control {control_name} in control labels")
-            return self.controls_by_label.get(control_name)
-        elif control_name in self.profile_controls:
-            logging.debug(f"Found control {control_name} in profile control ids")
-            return control_name
-
-        logger.debug(f"Control {control_name} does not exist in the profile")
-        return None
-
-    def create_implemented_requirement(self, control):
+    def create_implemented_requirement(
+        self, control: Control
+    ) -> Optional[ImplementedRequirement]:
         """Create implemented requirement from a control object"""
 
         logger.info(f"Creating implemented requirement for {control.id}")
-        control_id = self.get_profile_control_id(control.id)
+        control_id = self.profile.validate(control.id)
         if control_id:
             implemented_req = generate_sample_model(ImplementedRequirement)
             implemented_req.control_id = control_id
@@ -223,7 +210,7 @@ class ComponentDefinitionGenerator:
             return implemented_req
         return None
 
-    def handle_response(self, implemented_req, control):
+    def handle_response(self, implemented_req, control: Control) -> None:
         """
         Break down the response into parts.
 
@@ -250,14 +237,14 @@ class ComponentDefinitionGenerator:
         oscal_status = OscalStatus.from_string(control.status)
 
         if not sections_dict:
-            self.add_response_by_status(
+            self._add_response_by_status(
                 implemented_req, oscal_status, control_response.strip()
             )
         else:
             # process into statements
             implemented_req.statements = list()
             for section_label, section_content in sections_dict.items():
-                statement_id = self.get_profile_control_id(
+                statement_id = self.profile.validate(
                     f"{implemented_req.control_id}_smt.{section_label}"
                 )
                 if statement_id is None:
@@ -266,14 +253,17 @@ class ComponentDefinitionGenerator:
                 section_content_str = '\n'.join(section_content)
                 section_content_str = pattern.sub('', section_content_str)
                 statement = self.create_statement(statement_id)
-                self.add_response_by_status(
+                self._add_response_by_status(
                     statement, oscal_status, section_content_str.strip()
                 )
                 implemented_req.statements.append(statement)
 
-    def add_response_by_status(
-        self, type_with_props, implementation_status, control_response
-    ):
+    @staticmethod
+    def _add_response_by_status(
+        type_with_props: TypeWithProps,
+        implementation_status: str,
+        control_response: str,
+    ) -> None:
         """
         Add the response to the implemented requirement depending on the status.
 
@@ -281,19 +271,21 @@ class ComponentDefinitionGenerator:
         remarks with justification for the status.
         """
 
-        status_prop = Property(name=IMPLEMENTATION_STATUS, value=implementation_status)
+        status_prop = Property(
+            name=IMPLEMENTATION_STATUS, value=implementation_status
+        )  # type: ignore
         if (
             implementation_status == OscalStatus.IMPLEMENTED
             or implementation_status == OscalStatus.PARTIAL
         ):
-            type_with_props.description = control_response
+            type_with_props.description = control_response  # type: ignore
         else:
             status_prop.remarks = control_response
 
         type_with_props.props = as_list(type_with_props.props)
         type_with_props.props.append(status_prop)
 
-    def create_statement(self, statement_id, description=""):
+    def create_statement(self, statement_id, description="") -> Statement:
         """Create a statement."""
         statement = generate_sample_model(Statement)
         statement.statement_id = statement_id
@@ -301,7 +293,7 @@ class ComponentDefinitionGenerator:
             statement.description = description
         return statement
 
-    def create_control_implementation(self):
+    def create_control_implementation(self) -> ControlImplementation:
         """Get the control implementation for a component."""
         ci = generate_sample_model(ControlImplementation)
         ci.source = self.profile_href
@@ -313,14 +305,18 @@ class ComponentDefinitionGenerator:
         ci.implemented_requirements = all_implement_reqs
         return ci
 
-    def create_cd(self, output, component_definition_type="service"):
+    def create_cd(
+        self, output: str, component_definition_type: str = "service"
+    ) -> None:
         """Create a component definition and write it to a file."""
         logger.info(f"Creating component definition for {self.product}")
         component_definition = generate_sample_model(ComponentDefinition)
         component_definition.metadata.title = f"Component definition for {self.product}"
         component_definition.components = list()
 
-        control_implementation = self.create_control_implementation()
+        control_implementation: ControlImplementation = (
+            self.create_control_implementation()
+        )
 
         if not control_implementation.implemented_requirements:
             logger.warning(
@@ -328,13 +324,12 @@ class ComponentDefinitionGenerator:
             )
             return
 
-        oscal_component = DefinedComponent(
-            uuid=str(uuid.uuid4()),
-            title=self.product,
-            type=component_definition_type,
-            description=self.product,
-            control_implementations=[control_implementation],
-        )
+        oscal_component = generate_sample_model(DefinedComponent)
+        oscal_component.title = self.product
+        oscal_component.type = component_definition_type
+        oscal_component.description = self.product
+        oscal_component.control_implementations = [control_implementation]
+
         component_definition.components.append(oscal_component)
 
         output_str = output
