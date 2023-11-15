@@ -6,8 +6,12 @@ import argparse
 import logging
 import os
 import sys
+from typing import Any, Dict
+
+import ssg.environment
 
 from utils.oscal import SSG_ROOT, VENDOR_ROOT, RULES_JSON, BUILD_CONFIG
+from utils.oscal.control_selector import PolicyControlSelector
 from utils.oscal.cd_generator import ComponentDefinitionGenerator
 
 
@@ -97,6 +101,19 @@ def configure_logger(log_file=None, log_level=logging.INFO):
     logger.addHandler(console_handler)
 
 
+def get_env_yaml(
+    ssg_root: str, build_config_yaml: str, product: str
+) -> Dict[str, Any]:
+    """Get the environment yaml."""
+    product_yaml_path = ssg.products.product_yaml_path(ssg_root, product)
+    env_yaml = ssg.environment.open_environment(
+        build_config_yaml,
+        product_yaml_path,
+        os.path.join(ssg_root, "product_properties"),
+    )
+    return env_yaml
+
+
 def main():
     """Main function."""
     args = _parse_args()
@@ -106,15 +123,22 @@ def main():
     if ":" in args.control:
         args.control, filter_by_level = args.control.split(":")
 
+    env_yaml = get_env_yaml(args.root, args.build_config_yaml, args.product)
+
+    control_selector = PolicyControlSelector(
+        args.control,
+        args.root,
+        env_yaml,
+        filter_by_level,
+    )
+
     cd_generator = ComponentDefinitionGenerator(
-        args.product,
         args.root,
         args.json,
-        args.build_config_yaml,
+        env_yaml,
         args.vendor_dir,
         args.profile,
-        args.control,
-        filter_by_level,
+        control_selector,
     )
 
     try:

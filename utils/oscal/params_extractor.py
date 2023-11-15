@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Extract parameters from var files."""
+
 import logging
 import os
 from typing import Any, Dict, Generator
